@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  codeiq-backend:
+    build:
+      context: ../
+      dockerfile: web/backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - PYTHONPATH=/app
+    env_file:
+      - ../.env  # Load from project root
+    volumes:
+      - ../:/app
+    working_dir: /app
+    command: uvicorn web.backend.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - codeiq-network
+
+  # Streamlit Frontend  
+  codeiq-frontend:
+    build:
+      context: ../
+      dockerfile: web/frontend/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://codeiq-backend:8000
+    depends_on:
+      - codeiq-backend
+    volumes:
+      - ../web/frontend:/app
+    working_dir: /app
+    command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    networks:
+      - codeiq-network
+
+networks:
+  codeiq-network:
+    driver: bridge

@@ -4,11 +4,19 @@ Configuration settings for CodeQualityAgent
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings"""
     
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra='ignore'  # <-- This line solves the error
+    )
+
     # API Keys
     gemini_api_key: str = Field(..., env="GEMINI_API_KEY")
     github_token: Optional[str] = Field(None, env="GITHUB_TOKEN")
@@ -35,9 +43,6 @@ class Settings(BaseSettings):
     project_root: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
     data_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent / "data")
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 # Global settings instance
 settings = Settings()
