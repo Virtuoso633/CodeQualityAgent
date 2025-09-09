@@ -3,7 +3,7 @@
 echo "🚀 Starting Code Quality Intelligence Web Platform..."
 
 # Set environment variables
-export GEMINI_API_KEY="AIzaSyBtnrWXlhRwt_IQJ3XjOTWjRO56SS0hQWs"
+export GEMINI_API_KEY="your_api_key"
 
 # Start services
 cd web
