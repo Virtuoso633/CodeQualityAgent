@@ -1,5 +1,5 @@
 """
-RAG-based analyzer for large codebase understanding
+RAG-based analyzer for large codebase understanding - FINAL UI-FRIENDLY VERSION
 """
 import asyncio
 from typing import Dict, List, Any, Optional
@@ -13,138 +13,100 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-
 class RAGCodeAnalyzer:
     """RAG-based analyzer for understanding large codebases"""
 
     def __init__(self):
-        """Initialize RAG analyzer with Google embeddings and Gemini models"""
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",  # auto-resolves in new versions
-            google_api_key=settings.gemini_api_key
-        )
-
-        self.gemini_model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=settings.gemini_api_key,
-            temperature=0.1
-        )
-
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            separators=["\n\n", "\n", " ", ""]
-        )
-
+        self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=settings.gemini_api_key)
+        self.gemini_model = ChatGoogleGenerativeAI(model="gemini-2.5-pro", google_api_key=settings.gemini_api_key, temperature=0.1)
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200, separators=["\n\n", "\n", " ", ""])
         self.vector_store: Optional[FAISS] = None
-        self.codebase_metadata: Dict[str, Any] = {}
 
-    # -------------------- File & Language Utilities -------------------- #
     def _collect_code_files(self, directory_path: str) -> List[Path]:
-        """Collect all supported code files from a directory"""
         from config.settings import SUPPORTED_LANGUAGES
-
         dir_path = Path(directory_path)
-        if dir_path.is_file():
-            return [dir_path]
-
+        if not dir_path.is_dir(): return []
         extensions = [ext for lang in SUPPORTED_LANGUAGES.values() for ext in lang["extensions"]]
-        code_files = [f for ext in extensions for f in dir_path.rglob(f"*{ext}")]
-        return sorted(list(set(code_files)))
+        return sorted([f for ext in extensions for f in dir_path.rglob(f"*{ext}")])
 
-    def _detect_language(self, file_path: str) -> str:
-        """Detect language from file extension"""
+    def _detect_language(self, file_path: Path) -> str:
         from config.settings import SUPPORTED_LANGUAGES
-
-        ext = Path(file_path).suffix.lower()
+        ext = file_path.suffix.lower()
         for lang, config in SUPPORTED_LANGUAGES.items():
-            if ext in config["extensions"]:
-                return lang
+            if ext in config["extensions"]: return lang
         return "unknown"
 
-    # -------------------- RAG Indexing -------------------- #
-    async def build_codebase_index(self, codebase_path: str, max_files: int = 50) -> Dict[str, Any]:
-        """Build RAG index for large codebase"""
+    async def build_codebase_index(self, codebase_path: str, max_files: int = 200) -> bool:
+        """Builds RAG index and prepares it for saving."""
         try:
-            logger.info(f"🔍 Building RAG index for {codebase_path}")
+            code_root = Path(codebase_path)
+            logger.info(f"🔍 RAG: Building index for {code_root}")
             code_files = self._collect_code_files(codebase_path)
 
-            if len(code_files) > 100:
-                logger.info(f"📚 Large codebase detected: {len(code_files)} files")
+            if not code_files: return False
 
-            documents = []
-            metadatas = []
-
+            documents, metadatas = [], []
             for file_path in code_files[:max_files]:
                 try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content = f.read()
+                    content = file_path.read_text(encoding="utf-8")
                     chunks = self.text_splitter.split_text(content)
-                    for idx, chunk in enumerate(chunks):
+                    
+                    # --- FIX: STORE A CLEAN, RELATIVE PATH ---
+                    relative_path = file_path.relative_to(code_root)
+                    
+                    for chunk in chunks:
                         documents.append(chunk)
-                        metadatas.append({
-                            "file_path": str(file_path),
-                            "chunk_id": idx,
-                            "file_size": len(content),
-                            "language": self._detect_language(file_path)
-                        })
+                        metadatas.append({"source": str(relative_path), "language": self._detect_language(file_path)})
                 except Exception as e:
-                    logger.warning(f"⚠️ Skipping file {file_path}: {e}")
+                    logger.warning(f"⚠️ RAG: Skipping file {file_path}: {e}")
                     continue
 
-            logger.info(f"🔧 Creating embeddings for {len(documents)} chunks...")
+            if not documents: return False
+
+            logger.info(f"🔧 RAG: Creating embeddings for {len(documents)} chunks...")
             self.vector_store = await FAISS.afrom_texts(documents, self.embeddings, metadatas=metadatas)
-
-            self.codebase_metadata = {
-                "total_files": len(code_files),
-                "indexed_files": len(set(m["file_path"] for m in metadatas)),
-                "total_chunks": len(documents),
-                "languages": list(set(m["language"] for m in metadatas if m["language"]))
-            }
-
-            logger.info(f"✅ RAG index built: {len(documents)} chunks from {self.codebase_metadata['indexed_files']} files")
-            return self.codebase_metadata
+            return True
 
         except Exception as e:
-            logger.error(f"❌ RAG index building failed: {e}")
-            return {"error": str(e)}
+            logger.error(f"❌ RAG: Index building failed: {e}")
+            return False
 
-    # -------------------- RAG Query -------------------- #
+    def save_index(self, index_path: Path):
+        if not self.vector_store: raise ValueError("Vector store not initialized.")
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        self.vector_store.save_local(str(index_path))
+        logger.info(f"💾 RAG: Index saved to {index_path}")
+
+    def load_index(self, index_path: Path):
+        if not index_path.exists(): raise FileNotFoundError(f"RAG index not found at {index_path}")
+        self.vector_store = FAISS.load_local(str(index_path), self.embeddings, allow_dangerous_deserialization=True)
+        logger.info(f"📚 RAG: Index loaded from {index_path}")
+
     async def query_codebase(self, query: str, k: int = 5) -> Dict[str, Any]:
-        """Query the codebase using RAG"""
+        """Queries the loaded codebase index using RAG."""
         try:
-            if not self.vector_store:
-                return {"error": "No RAG index built. Please build index first."}
+            if not self.vector_store: return {"error": "No RAG index loaded."}
 
-            # Retrieve top-k relevant chunks
             docs = await self.vector_store.asimilarity_search(query, k=k)
-
-            context_text = "\n\n".join([
-                f"File: {doc.metadata['file_path']}\n{doc.page_content}" for doc in docs
-            ])
+            context_text = "\n\n---\n\n".join([f"**Source File: {doc.metadata['source']}**\n```\n{doc.page_content}\n```" for doc in docs])
 
             prompt = f"""
-            Based on the following code snippets from the codebase, answer the user's question:
+            You are an expert AI programming assistant. Based on the following relevant code snippets retrieved from a large codebase, provide a clear and detailed answer to the user's question. 
+            Reference the source files where appropriate using markdown formatting (e.g., `filename.py`).
 
-            CODEBASE CONTEXT:
+            **Retrieved Code Snippets:**
             {context_text}
 
-            USER QUESTION: {query}
+            **User's Question:** {query}
 
-            Provide a detailed answer referencing specific files and code sections.
-            Include suggestions for improvements if relevant.
+            **Your Answer:**
             """
-
-            response = await self.gemini_model.ainvoke([{"role": "user", "content": prompt}])
+            response = await self.gemini_model.ainvoke(prompt)
 
             return {
-                "query": query,
-                "answer": response.content,
-                "retrieved_chunks": len(docs),
-                "sources": [doc.metadata["file_path"] for doc in docs],
-                "model_used": "gemini-2.5-pro-rag"
+                "query": query, "answer": response.content,
+                "sources": sorted(list(set(doc.metadata["source"] for doc in docs))) # Return the clean relative paths
             }
-
         except Exception as e:
             logger.error(f"❌ RAG query failed: {e}")
             return {"error": str(e)}

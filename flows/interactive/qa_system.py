@@ -139,42 +139,46 @@ class InteractiveQASystem:
             """
         
         return system_prompt
-    
-    async def ask_question(self, question: str) -> Dict[str, Any]:
-        """Ask a question about the codebase"""
+            
+
+    async def ask_question(self, question: str, context_override: Optional[str] = None) -> Dict[str, Any]:
+        """Ask a question about the codebase, with optional direct context override."""
         try:
-            if not self.codebase_context:
+            # Create system prompt based on available context
+            if context_override:
+                # Use the direct context string provided by the API
+                system_prompt = f"""
+                You are an expert code analysis assistant. A user has analyzed their codebase and received the following summary. 
+                Answer their follow-up question based *only* on this summary.
+
+                ANALYSIS SUMMARY:
+                {context_override}
+                
+                Based on the summary above, answer the user's question. Be helpful and refer to the data provided.
+                """
+            elif not self.codebase_context:
                 return {
                     "error": "No codebase loaded. Please load a codebase first using the 'chat' command with a path."
                 }
-            
-            # Create conversation with system context
-            system_prompt = self._create_system_prompt()
-            
-            # Get conversation history
+            else:
+                # This path is used by the CLI
+                system_prompt = self._create_system_prompt()
+
+            # The rest of the function remains the same...
             memory_messages = self.conversation_memory.chat_memory.messages
-            
-            # Build message chain
             messages = [SystemMessage(content=system_prompt)]
-            
-            # Add conversation history
-            for msg in memory_messages[-10:]:  # Last 10 messages
-                messages.append(msg)
-            
-            # Add current question
+            messages.extend(memory_messages[-10:])
             messages.append(HumanMessage(content=question))
             
-            # Get response from Gemini
             response = await self.gemini_model.ainvoke(messages)
             
-            # Save to memory
             self.conversation_memory.chat_memory.add_user_message(question)
             self.conversation_memory.chat_memory.add_ai_message(response.content)
             
             return {
                 "question": question,
                 "answer": response.content,
-                "codebase": self.current_codebase_path,
+                "codebase": self.current_codebase_path or "Web Analysis",
                 "timestamp": asyncio.get_event_loop().time(),
                 "model_used": "gemini-2.5-pro"
             }
