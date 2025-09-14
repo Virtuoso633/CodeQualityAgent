@@ -11,10 +11,14 @@ import shutil
 import ast
 from dataclasses import dataclass
 from collections import defaultdict
+import re
+import os
 
 from config.settings import settings, SUPPORTED_LANGUAGES
 from agents.specialized.security_agent import get_security_agent
 from agents.specialized.performance_agent import get_performance_agent
+from agents.specialized.performance_agent import get_performance_agent
+from agents.specialized.architecture_agent import get_architecture_agent
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +30,22 @@ class FileAnalysis:
 
 @dataclass
 class CodebaseAnalysis:
-    total_files: int; languages_detected: Dict[str, int]; file_analyses: Dict[str, FileAnalysis]
-    cross_file_relationships: Dict[str, List[str]]; duplicate_blocks: List[Dict]
-    architecture_issues: List[Dict]; testing_gaps: List[Dict]; overall_scores: Dict[str, float]
-
+    total_files: int
+    languages_detected: Dict[str, int]
+    file_analyses: Dict[str, FileAnalysis]
+    cross_file_relationships: Dict[str, List[str]]
+    duplicate_blocks: List[Dict]
+    architecture_summary: str  # This is the line that was missing
+    testing_gaps: List[Dict]
+    overall_scores: Dict[str, float]
+    
 class ComprehensiveCodebaseScanner:
     SUPPORTED_LANGUAGES = SUPPORTED_LANGUAGES
     
     def __init__(self):
         self.security_agent = get_security_agent()
         self.performance_agent = get_performance_agent()
+        self.architecture_agent = get_architecture_agent()
 
     async def scan_codebase(self, path: str) -> CodebaseAnalysis:
         cloned_path = path
@@ -49,22 +59,24 @@ class ComprehensiveCodebaseScanner:
             if not all_files: raise ValueError("No supported code files found.")
             logger.info(f"📁 Found {len(all_files)} files. Delegating to agents...")
 
+            # Run file-level analysis
             tasks = [self._analyze_single_file(f, Path(cloned_path)) for f in all_files]
             results = await asyncio.gather(*tasks)
             file_analyses = {res.filepath: res for res in results if res}
+            
+            # Run codebase-level analysis
+            relative_file_paths = [str(p.relative_to(cloned_path)) for p in all_files]
+            arch_task = self.architecture_agent.analyze_codebase_structure(relative_file_paths)
+            architecture_summary = await arch_task # GET ARCHITECTURE SUMMARY
 
             relationships = self._analyze_cross_file_relationships(file_analyses)
-            architecture_issues = self._analyze_architecture(relationships)
             testing_gaps = self._analyze_testing_coverage(file_analyses)
-            
-            # --- THIS IS THE CORRECTED LINE ---
-            # We now pass all the required arguments to the scoring function.
-            overall_scores = self._calculate_overall_scores(file_analyses, architecture_issues, testing_gaps)
+            overall_scores = self._calculate_overall_scores(file_analyses, [], testing_gaps)
 
             return CodebaseAnalysis(
                 total_files=len(all_files), languages_detected=self._count_languages(file_analyses),
                 file_analyses=file_analyses, cross_file_relationships=relationships,
-                duplicate_blocks=[], architecture_issues=architecture_issues,
+                duplicate_blocks=[], architecture_summary=architecture_summary, # ADD THIS
                 testing_gaps=testing_gaps, overall_scores=overall_scores
             )
         finally:
@@ -111,18 +123,35 @@ class ComprehensiveCodebaseScanner:
             logger.error(f"Error analyzing {file_path.name}: {e}")
             return None
 
-    def _analyze_python_with_ast(self, content: str) -> (List[Dict], Dict):
-        issues, complexity = [], 0
+    def _analyze_python_with_ast(self, content: str) -> tuple[List[Dict], Dict]:
+        # --- THIS IS THE NEW, MORE POWERFUL AST ANALYSIS ---
+        issues, complexity_total = [], 0
         try:
             tree = ast.parse(content)
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
+                    # Check for long parameter lists
                     if len(node.args.args) > 5:
-                        issues.append({'line': node.lineno, 'severity': 'Medium', 'type': 'Long Parameter List', 'explanation': f"Function '{node.name}' has too many parameters ({len(node.args.args)}).", 'fix_suggestion': 'Consider refactoring.'})
-                    complexity += self._get_cyclomatic_complexity(node)
+                        issues.append({'line': node.lineno, 'severity': 'Medium', 'type': 'Long Parameter List', 'explanation': f"Function '{node.name}' has {len(node.args.args)} parameters, which can make it hard to use and test."})
+                    
+                    # Calculate and accumulate cyclomatic complexity
+                    complexity = self._get_cyclomatic_complexity(node)
+                    if complexity > 10:
+                        issues.append({'line': node.lineno, 'severity': 'High', 'type': 'High Cyclomatic Complexity', 'explanation': f"Function '{node.name}' has a complexity of {complexity}, making it difficult to understand and maintain."})
+                    complexity_total += complexity
+
+                elif isinstance(node, ast.ExceptHandler):
+                    # Check for broad 'except Exception'
+                    if isinstance(node.type, ast.Name) and node.type.id == 'Exception':
+                        issues.append({'line': node.lineno, 'severity': 'Medium', 'type': 'Broad Exception Clause', 'explanation': "Catching a broad 'Exception' can hide unexpected errors. Catch more specific exceptions."})
+                    # Check for empty 'except:' blocks
+                    if not node.body or (len(node.body) == 1 and isinstance(node.body, ast.Pass)):
+                        issues.append({'line': node.lineno, 'severity': 'High', 'type': 'Empty Except Block', 'explanation': "An empty 'except' block swallows errors silently, making debugging extremely difficult."})
+
         except SyntaxError as e:
-            issues.append({'line': e.lineno, 'severity': 'High', 'type': 'Syntax Error', 'explanation': f"Code has a syntax error: {e}", 'fix_suggestion': 'Correct the syntax.'})
-        return issues, {'cyclomatic_complexity': complexity}
+            issues.append({'line': e.lineno, 'severity': 'Critical', 'type': 'Syntax Error', 'explanation': f"Code has a syntax error: {e}"})
+        
+        return issues, {'cyclomatic_complexity': complexity_total}
     
     def _get_cyclomatic_complexity(self, node):
         complexity = 1
@@ -163,15 +192,20 @@ class ComprehensiveCodebaseScanner:
         for analysis in analyses.values(): counts[analysis.language] += 1
         return dict(counts)
 
+
     def _calculate_overall_scores(self, analyses: Dict, arch_issues, test_gaps) -> Dict[str, float]:
         if not analyses: return {}
         num_files = len(analyses)
-        sec_sev = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-        perf_sev = {"High": 3, "Medium": 2, "Low": 1}
         
+        # --- THIS IS THE FIX: More balanced severity weights ---
+        sec_sev = {"Critical": 2.5, "High": 1.5, "Medium": 0.5, "Low": 0.2}
+        perf_sev = {"High": 2.0, "Medium": 1.0, "Low": 0.3}
+        # --- END OF FIX ---
+
         sec_impact = sum(sec_sev.get(i['severity'], 0) for a in analyses.values() for i in a.security_issues)
         perf_impact = sum(perf_sev.get(i['severity'], 0) for a in analyses.values() for i in a.performance_issues)
         
+        # The formula remains the same, but now uses the more balanced impact scores
         sec_score = max(0.0, 10.0 - (sec_impact / num_files))
         perf_score = max(0.0, 10.0 - (perf_impact / num_files))
         doc_score = sum(a.documentation_score for a in analyses.values()) / num_files if num_files > 0 else 0.0
@@ -181,5 +215,6 @@ class ComprehensiveCodebaseScanner:
         
         return {k: round(v, 1) for k, v in {
             'overall': overall, 'security': sec_score, 'performance': perf_score,
-            'maintainability': maint_score, 'documentation': doc_score, 'complexity': 8.0
+            'maintainability': maint_score, 'documentation': doc_score, 'complexity': 8.0 # Complexity can be improved later
         }.items()}
+        

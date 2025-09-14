@@ -57,7 +57,37 @@ class GeminiClient:
         except Exception as e:
             logger.error(f"❌ Simple analysis failed: {e}")
             return f"Analysis failed: {str(e)}"
-    
+
+    async def analyze_code_detailed(self, code: str, language: str) -> Dict[str, Any]:
+        """
+        Detailed code analysis using the complex model.
+        """
+        try:
+            prompt = f"""
+            You are an expert code reviewer. Conduct a detailed analysis of the following {language} code.
+            Identify issues across multiple categories: Security, Performance, Maintainability, and Best Practices.
+            For each issue found, provide the line number, a detailed explanation, and a concrete suggestion for a fix.
+            
+            Code:
+            ```{language}
+            {code}
+            ```
+            
+            Respond with a JSON object containing a list of issues.
+            Example format: {{"issues": [{{"line": 5, "category": "Security", "description": "Hardcoded password.", "suggestion": "Use environment variables."}}]}}
+            """
+            
+            response = await self.complex_model.ainvoke([HumanMessage(content=prompt)])
+            # Attempt to parse the response as JSON, with a fallback
+            try:
+                return json.loads(response.content)
+            except json.JSONDecodeError:
+                return {"content": response.content}
+
+        except Exception as e:
+            logger.error(f"❌ Detailed analysis failed: {e}")
+            return {"error": f"Detailed analysis failed: {str(e)}"}
+
     async def test_connection(self) -> bool:
         try:
             response = await self.primary_model.ainvoke([HumanMessage(content="Say 'Hello'")])

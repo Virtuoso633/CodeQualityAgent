@@ -18,3 +18,5 @@ pydantic-settings
 
 faiss-cpu
 gitpython==3.1.37
+# In requirements.txt
+streamlit-mermaid==0.3.0

@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+
+# Data and Caches
+data/
+.pytest_cache/
+.mypy_cache/

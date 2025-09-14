@@ -3,7 +3,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install Streamlit and dependencies
-RUN pip install streamlit plotly pandas requests
+COPY requirements.txt .
+
+# Install all dependencies from the requirements file, ensuring both services have the same libraries
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Create .streamlit directory
 RUN mkdir -p .streamlit

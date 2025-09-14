@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: codeiq-backend
+    env: docker
+    dockerfilePath: ./web/backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        fromSecret: true
+      - key: PYTHONPATH
+        value: /app

@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import track
 import logging
+import json
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -20,7 +21,6 @@ from agents.core.base_analyzer import get_base_analyzer
 from models.gemini.gemini_client import get_gemini_client
 from agents.specialized.security_agent import get_security_agent
 from agents.specialized.performance_agent import get_performance_agent
-from flows.analysis.crew_coordinator import get_crew_coordinator
 from flows.interactive.qa_system import get_qa_system
 from tools.analyzers.rag_analyzer import RAGCodeAnalyzer
 from tools.analyzers.comprehensive_scanner import ComprehensiveCodebaseScanner
@@ -115,17 +115,11 @@ def security(
             security_agent = get_security_agent()
             analyzer = get_base_analyzer()
             
-            # Check if file exists and get details
             target_path = Path(path)
-            if not target_path.exists():
-                console.print(f"❌ File not found: {path}", style="bold red")
-                return
-            
             if not target_path.is_file():
                 console.print("❌ Security analysis currently supports single files only", style="bold red")
                 return
             
-            # Get language and code content
             language = analyzer.detect_language(path)
             if not language:
                 console.print("❌ Unsupported file type for security analysis", style="bold red")
@@ -133,13 +127,11 @@ def security(
             
             code_content = analyzer.read_code_file(path)
             
-            # Run security analysis
-            result = await security_agent.analyze_file_security(path, code_content, language)
+            with console.status("🕵️ Running security agent...", spinner="dots"):
+                result = await security_agent.analyze_code(code_content, language)
             
-            # Display results
-            display_security_results(result)
+            display_specialized_results(result, "Security", path)
             
-            # Save if requested
             if output:
                 save_results(result, output)
                 console.print(f"💾 Security results saved to: {output}", style="green")
@@ -164,17 +156,11 @@ def performance(
             performance_agent = get_performance_agent()
             analyzer = get_base_analyzer()
             
-            # Check if file exists and get details
             target_path = Path(path)
-            if not target_path.exists():
-                console.print(f"❌ File not found: {path}", style="bold red")
-                return
-            
             if not target_path.is_file():
                 console.print("❌ Performance analysis currently supports single files only", style="bold red")
                 return
             
-            # Get language and code content
             language = analyzer.detect_language(path)
             if not language:
                 console.print("❌ Unsupported file type for performance analysis", style="bold red")
@@ -182,13 +168,11 @@ def performance(
             
             code_content = analyzer.read_code_file(path)
             
-            # Run performance analysis
-            result = await performance_agent.analyze_file_performance(path, code_content, language)
+            with console.status("🏃 Running performance agent...", spinner="dots"):
+                result = await performance_agent.analyze_code(code_content, language)
             
-            # Display results
-            display_performance_results(result)
+            display_specialized_results(result, "Performance", path)
             
-            # Save if requested
             if output:
                 save_results(result, output)
                 console.print(f"💾 Performance results saved to: {output}", style="green")
@@ -198,57 +182,6 @@ def performance(
             raise typer.Exit(1)
     
     asyncio.run(_performance_analyze())
-    
-
-@app.command()
-def crew_analyze(
-    path: str = typer.Argument(..., help="Path to code file"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Save results to file")
-):
-    """Run comprehensive analysis using CrewAI multi-agent coordination"""
-    
-    console.print(f"🚀 Starting CrewAI multi-agent analysis of: {path}", style="bold magenta")
-    
-    async def _crew_analyze():
-        try:
-            crew_coordinator = get_crew_coordinator()
-            analyzer = get_base_analyzer()
-            
-            # Check if file exists
-            target_path = Path(path)
-            if not target_path.exists():
-                console.print(f"❌ File not found: {path}", style="bold red")
-                return
-            
-            if not target_path.is_file():
-                console.print("❌ CrewAI analysis currently supports single files only", style="bold red")
-                return
-            
-            # Get language and code content
-            language = analyzer.detect_language(path)
-            if not language:
-                console.print("❌ Unsupported file type", style="bold red")
-                return
-                
-            code_content = analyzer.read_code_file(path)
-            
-            # Run CrewAI analysis
-            with console.status("🤖 Running multi-agent analysis...", spinner="dots"):
-                result = await crew_coordinator.analyze_file_with_crew(path, code_content, language)
-            
-            # Display results
-            display_crew_results(result)
-            
-            # Save if requested
-            if output:
-                save_results(result, output)
-                console.print(f"💾 CrewAI results saved to: {output}", style="green")
-            
-        except Exception as e:
-            console.print(f"❌ CrewAI analysis failed: {e}", style="bold red")
-            raise typer.Exit(1)
-    
-    asyncio.run(_crew_analyze())
 
 @app.command()
 def chat(
@@ -285,19 +218,16 @@ def rag_build(
             rag_analyzer = RAGCodeAnalyzer()
             
             with console.status("🔧 Building RAG index...", spinner="dots"):
-                metadata = await rag_analyzer.build_codebase_index(path)
+                success = await rag_analyzer.build_codebase_index(path)
             
-            if "error" in metadata:
-                console.print(f"❌ RAG build failed: {metadata['error']}", style="bold red")
+            if not success:
+                console.print(f"❌ RAG build failed. No supported files found or an error occurred.", style="bold red")
                 return
             
             console.print(Panel(
                 f"📚 **Codebase**: {path}\n"
-                f"📄 **Total Files**: {metadata['total_files']}\n"
-                f"🔍 **Indexed Files**: {metadata['indexed_files']}\n" 
-                f"📝 **Total Chunks**: {metadata['total_chunks']}\n"
-                f"🔤 **Languages**: {', '.join(metadata['languages'])}",
-                title="RAG Index Built Successfully",
+                f"✅ Index built successfully in memory.",
+                title="RAG Index Built",
                 style="purple"
             ))
             
@@ -320,7 +250,7 @@ def rag_query(
         try:
             rag_analyzer = RAGCodeAnalyzer()
             
-            # Build index if not exists (for demo)
+            console.print(f"🛠️ Building index for '{path}' before querying...")
             await rag_analyzer.build_codebase_index(path)
             
             with console.status("🔍 Searching codebase...", spinner="dots"):
@@ -332,7 +262,7 @@ def rag_query(
             
             console.print(Panel(
                 result["answer"],
-                title=f"RAG Query Result ({result['retrieved_chunks']} sources)",
+                title=f"RAG Query Result",
                 style="blue"
             ))
             
@@ -344,122 +274,46 @@ def rag_query(
     
     asyncio.run(_rag_query())
 
-
-def display_crew_results(result: dict):
-    """Display CrewAI analysis results"""
-    if "error" in result:
-        console.print(Panel(f"❌ Error: {result['error']}", title="CrewAI Analysis Error", style="red"))
+def display_specialized_results(result: dict, analysis_type: str, file_path: str):
+    """Generic display for specialized agent results (Security, Performance)."""
+    if not isinstance(result, dict) or "issues" not in result:
+        console.print(Panel(f"❌ Error: Invalid response format from agent.\nReceived: {result}", title=f"{analysis_type} Analysis Error", style="red"))
         return
+
+    issues = result["issues"]
     
     console.print(Panel(
-        f"🚀 **File**: {result['file_path']}\n"
-        f"🔤 **Language**: {result['language']}\n"
-        f"🤖 **Analysis Type**: Multi-Agent Crew Coordination\n"
-        f"👥 **Agents Used**: {', '.join(result['agents_used'])}",
-        title="CrewAI Analysis Summary",
-        style="magenta"
+        f"📄 **File**: {file_path}\n"
+        f"📊 **Analysis**: {analysis_type}\n"
+        f"🚨 **Total Issues Found**: {len(issues)}",
+        title=f"{analysis_type} Analysis Summary",
+        style="green"
     ))
-    
-    # Show task outputs
-    task_outputs = result.get("task_outputs", {})
-    
-    for task_name, output in task_outputs.items():
-        if output and str(output).strip():
-            console.print(f"\n🤖 **{task_name.upper()} AGENT ANALYSIS:**")
-            # Truncate long outputs for display
-            content = str(output)
-            if len(content) > 800:
-                content = content[:800] + "..."
-            console.print(Panel(content, style="dim"))
-    
-    # Show final crew results
-    if result.get("crew_results"):
-        console.print(Panel(
-            str(result["crew_results"])[:1000] + "..." if len(str(result["crew_results"])) > 1000 else str(result["crew_results"]),
-            title="Final Crew Coordination Report",
-            style="green"
-        ))
 
-def display_security_results(result: dict):
-    """Display security analysis results"""
-    if "error" in result:
-        console.print(Panel(f"❌ Error: {result['error']}", title="Security Analysis Error", style="red"))
+    if not issues:
+        console.print(f"✅ No {analysis_type.lower()} issues found.", style="bold green")
         return
-    
-    # Show summary
-    summary = result.get("summary", {})
-    console.print(Panel(
-        f"🔒 **File**: {result['file_path']}\n"
-        f"🔤 **Language**: {result['language']}\n"
-        f"🚨 **Risk Level**: {summary.get('risk_level', 'unknown').upper()}\n"
-        f"🔍 **Pattern Matches**: {summary.get('total_pattern_matches', 0)}\n"
-        f"📋 **Categories Found**: {', '.join(summary.get('categories_found', []))}",
-        title="Security Analysis Summary",
-        style="red"
-    ))
-    
-    # Show pattern matches
-    pattern_analysis = result.get("pattern_analysis", {})
-    if pattern_analysis.get("pattern_matches"):
-        for category, matches in pattern_analysis["pattern_matches"].items():
-            console.print(f"\n🚨 **{category.upper().replace('_', ' ')}** ({len(matches)} issues):")
-            for match in matches[:3]:  # Show first 3 matches
-                console.print(f"   Line {match['line']}: {match['code']}", style="dim")
-            if len(matches) > 3:
-                console.print(f"   ... and {len(matches) - 3} more", style="dim")
-    
-    # Show detailed analysis (truncated)
-    detailed = result.get("detailed_analysis", {})
-    if detailed.get("detailed_analysis") and "error" not in detailed:
-        content = detailed["detailed_analysis"]
-        if len(content) > 500:
-            content = content[:500] + "..."
-        console.print(Panel(content, title="Detailed Security Analysis", style="blue"))
 
-def display_performance_results(result: dict):
-    """Display performance analysis results"""
-    if "error" in result:
-        console.print(Panel(f"❌ Error: {result['error']}", title="Performance Analysis Error", style="red"))
-        return
-    
-    # Show summary
-    summary = result.get("summary", {})
-    console.print(Panel(
-        f"⚡ **File**: {result['file_path']}\n"
-        f"🔤 **Language**: {result['language']}\n"
-        f"📊 **Performance Score**: {summary.get('performance_score', 0)}/10\n"
-        f"🔍 **Total Issues**: {summary.get('total_issues', 0)}\n"
-        f"🚨 **Critical Issues**: {summary.get('critical_issues', 0)}",
-        title="Performance Analysis Summary",
-        style="yellow"
-    ))
-    
-    # Show severity breakdown
-    severity = summary.get("severity_breakdown", {})
-    if any(severity.values()):
-        console.print(f"\n📈 **Issue Breakdown**:")
-        for level, count in severity.items():
-            if count > 0:
-                console.print(f"   {level.capitalize()}: {count}", style="dim")
-    
-    # Show pattern matches
-    pattern_analysis = result.get("pattern_analysis", {})
-    if pattern_analysis.get("pattern_matches"):
-        for category, matches in pattern_analysis["pattern_matches"].items():
-            console.print(f"\n⚡ **{category.upper().replace('_', ' ')}** ({len(matches)} issues):")
-            for match in matches[:3]:  # Show first 3 matches
-                console.print(f"   Line {match['line']}: {match['code']} ({match['severity']})", style="dim")
-            if len(matches) > 3:
-                console.print(f"   ... and {len(matches) - 3} more", style="dim")
-    
-    # Show detailed analysis (truncated)  
-    detailed = result.get("detailed_analysis", {})
-    if detailed.get("detailed_analysis") and "error" not in detailed:
-        content = detailed["detailed_analysis"]
-        if len(content) > 500:
-            content = content[:500] + "..."
-        console.print(Panel(content, title="Detailed Performance Analysis", style="blue"))
+    table = Table(title=f"Detected {analysis_type} Issues")
+    table.add_column("Severity", style="cyan")
+    table.add_column("Line", style="magenta")
+    table.add_column("Type", style="yellow")
+    table.add_column("Explanation", style="green")
+    table.add_column("Fix Suggestion", style="blue")
 
+    severity_map = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+    sorted_issues = sorted(issues, key=lambda x: severity_map.get(x.get('severity', 'Low'), 4))
+
+    for issue in sorted_issues:
+        table.add_row(
+            issue.get("severity", "N/A"),
+            str(issue.get("line", "N/A")),
+            issue.get("type", "N/A"),
+            issue.get("explanation", "N/A"),
+            issue.get("fix_suggestion", "N/A")
+        )
+    
+    console.print(table)
 
 def display_results(result: dict, analysis_type: str):
     """Display analysis results in a nice format"""
@@ -480,14 +334,12 @@ def display_results(result: dict, analysis_type: str):
         ))
         
         # Display the actual analysis
-        if isinstance(result['result'], dict):
-            if result['result'].get('content'):
-                console.print(Panel(result['result']['content'], title="Analysis Details", style="blue"))
-            else:
-                console.print(Panel(str(result['result']), title="Analysis Details", style="blue"))
+        analysis_content = result['result']
+        if isinstance(analysis_content, str):
+             console.print(Panel(analysis_content, title="Analysis Details", style="blue"))
         else:
-            console.print(Panel(str(result['result']), title="Analysis Details", style="blue"))
-    
+             console.print(Panel(json.dumps(analysis_content, indent=2), title="Analysis Details", style="blue"))
+
     # Directory results
     elif "directory" in result and "results" in result:
         console.print(Panel(
@@ -508,17 +360,10 @@ def display_results(result: dict, analysis_type: str):
                 
             if "error" not in file_result:
                 console.print(f"\n📄 {file_result['file_path']} ({file_result['language']})")
-                if isinstance(file_result['result'], dict) and file_result['result'].get('content'):
-                    # Truncate long responses
-                    content = file_result['result']['content']
-                    if len(content) > 200:
-                        content = content[:200] + "..."
-                    console.print(f"   {content}", style="dim")
-                else:
-                    content = str(file_result['result'])
-                    if len(content) > 200:
-                        content = content[:200] + "..."
-                    console.print(f"   {content}", style="dim")
+                content = str(file_result.get('result', ''))
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                console.print(f"   {content}", style="dim")
 
 def save_results(result: dict, output_path: str):
     """Save results to file"""
@@ -552,12 +397,16 @@ def analyze_comprehensive_repo(
             # Save detailed results
             with open(output, 'w') as f:
                 import json
-                json.dump({
+                # A proper serializer would be needed for dataclasses
+                # For CLI, a simplified dict is sufficient
+                simplified_results = {
                     "total_files": results.total_files,
-                    "languages": results.languages_detected,
-                    "scores": results.overall_scores,
-                    "file_count_by_language": results.languages_detected
-                }, f, indent=2)
+                    "languages_detected": results.languages_detected,
+                    "overall_scores": results.overall_scores,
+                    "architecture_issues": results.architecture_issues,
+                    "testing_gaps": results.testing_gaps
+                }
+                json.dump(simplified_results, f, indent=2)
             console.print(f"💾 Results saved to {output}")
     
     import asyncio
@@ -579,7 +428,6 @@ def info():
     table.add_row("Max File Size", f"{settings.max_file_size_mb} MB")
     
     # Supported languages
-    languages = ", ".join(settings.project_root.parent.name for _ in range(1))  # Placeholder
     from config.settings import SUPPORTED_LANGUAGES
     languages = ", ".join(SUPPORTED_LANGUAGES.keys())
     table.add_row("Supported Languages", languages)
