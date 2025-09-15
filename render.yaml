@@ -5,7 +5,5 @@ services:
     dockerfilePath: ./web/backend/Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: GEMINI_API_KEY
-        fromSecret: true
-      - key: PYTHONPATH
+      - key: PYTHONPATH   # This non-secret variable is fine here
         value: /app
