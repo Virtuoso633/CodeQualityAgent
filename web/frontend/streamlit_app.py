@@ -100,6 +100,15 @@ def make_api_request(endpoint: str, method: str = "POST", data: any = None, file
 def display_sidebar():
     with st.sidebar:
         st.header("CodeIQ 🤖")
+        # --- ADD THIS TEMPORARY DEBUG CODE ---
+        st.markdown("--- DEBUG INFO ---")
+        if "API_BASE_URL" in st.secrets:
+            st.success("Found secret: API_BASE_URL")
+            st.write(f"URL Value: `{st.secrets['API_BASE_URL']}`")
+        else:
+            st.error("FATAL: API_BASE_URL secret NOT FOUND.")
+        st.markdown("--- END DEBUG INFO ---")
+        # --- END DEBUG CODE ---
         st.subheader("Start New Analysis")
         analysis_mode = st.radio("Source", ["🌐 GitHub Repository", "📤 Upload Project Files"], label_visibility="collapsed")
 
