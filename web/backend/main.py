@@ -27,7 +27,7 @@ from tools.analyzers.rag_analyzer import RAGCodeAnalyzer
 from flows.interactive.qa_system import get_qa_system
 from flows.analysis.crew_coordinator import get_crew_coordinator
 
-# --- INITIALIZATION ---
+# --- INITIALIZATION --
 comprehensive_scanner = ComprehensiveCodebaseScanner()
 rag_analyzer = RAGCodeAnalyzer()
 qa_system = get_qa_system()
@@ -38,7 +38,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="🤖 Code Quality Intelligence API - RAG Integrated", version="2.2.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])##
 
 class InteractiveQueryRequest(BaseModel):
     query: str = Field(...)

@@ -39,7 +39,7 @@ def genPakoLink(graphMarkdown: str):
 if "API_BASE_URL" in st.secrets:
     API_BASE_URL = st.secrets["API_BASE_URL"]
 else:
-    API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    API_BASE_URL = os.environ.get("API_BASE_URL")
 # --- END OF FIX ---
 
 for key, default in [
