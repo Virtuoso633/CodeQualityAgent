@@ -34,7 +34,13 @@ def genPakoLink(graphMarkdown: str):
     return link
 
 # --- API Configuration & Session State ---
-API_BASE_URL = os.environ.get("API_BASE_URL")
+# --- THIS IS THE CRITICAL FIX ---
+# Use st.secrets to read the URL on Streamlit Cloud, but fall back to os.environ for local development
+if "API_BASE_URL" in st.secrets:
+    API_BASE_URL = st.secrets["API_BASE_URL"]
+else:
+    API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+# --- END OF FIX ---
 
 for key, default in [
     ("session_id", str(uuid.uuid4())), ("analysis_results", None),
