@@ -1,0 +1,17 @@
+{
+  "builds": [
+    {
+      "src": "web/frontend/streamlit_app.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "45mb"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "web/frontend/streamlit_app.py"
+    }
+  ]
+}
