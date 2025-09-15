@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+#RUN pip install --no-cache-dir -r requirements.txt
+
+# Add gunicorn for production
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
 
 # Copy the entire project
 COPY . .
@@ -20,5 +24,8 @@ ENV PYTHONPATH=/app
 # Expose port
 EXPOSE 8000
 
-# Run FastAPI from the correct path
-CMD ["uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# # Run FastAPI from the correct path
+# CMD ["uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# Run the app with Gunicorn for production
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "web.backend.main:app", "--bind", "0.0.0.0:8080"]
