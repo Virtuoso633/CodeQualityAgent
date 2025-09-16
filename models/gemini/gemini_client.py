@@ -2,12 +2,14 @@
 Gemini model client for CodeQualityAgent - FINAL VERSION
 """
 import asyncio
+import json
 from typing import Dict, Any, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 import google.generativeai as genai
 from config.settings import settings
 import logging
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,17 +25,15 @@ class GeminiClient:
             genai.configure(api_key=settings.gemini_api_key)
             
             self.primary_model = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash", # Updated model name
+                model="gemini-2.0-flash-lite", # Updated model name
                 google_api_key=settings.gemini_api_key,
-                temperature=0.1,
-                max_tokens=4000
+                temperature=0.1
             )
             
             self.complex_model = ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro", # Updated model name
+                model="gemini-2.5-pro", # Updated model name
                 google_api_key=settings.gemini_api_key,
-                temperature=0.1,
-                max_tokens=8000
+                temperature=0.1
             )
             logger.info("✅ Gemini models initialized successfully.")
         except Exception as e:
