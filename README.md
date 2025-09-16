@@ -1,4 +1,5 @@
-# CodeIQ 🤖: AI-Powered Code Quality Intelligence Agent
+# CodeIQ: AI-Powered Code Quality Intelligence Agent
+
 
 CodeIQ is an advanced, AI-powered agent designed to perform deep analysis of code repositories. It goes beyond simple linting to provide actionable, developer-friendly intelligence on security, performance, quality, and architecture, helping teams maintain high standards and manage technical debt at scale.
 
@@ -6,7 +7,8 @@ The project features a powerful local CLI for developers and a fully deployed we
 
 **Live Demo:** [https://codequalityagent-633.streamlit.app/](https://codequalityagent-633.streamlit.app/)
 
-![CodeIQ Dashboard](https://i.imgur.com/your-dashboard-screenshot.png) ---
+![CodeIQ Dashboard]
+(![alt text](<Screenshot 2025-09-16 at 5.58.50 AM.png>)) ---
 
 ## ✨ Core Features
 
