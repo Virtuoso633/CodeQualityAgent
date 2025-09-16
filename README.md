@@ -6,9 +6,24 @@ CodeIQ is an advanced, AI-powered agent designed to perform deep analysis of cod
 The project features a powerful local CLI for developers and a fully deployed web application for interactive, visual analysis.
 
 **Live Demo:** [https://codequalityagent-633.streamlit.app/](https://codequalityagent-633.streamlit.app/)
-
 ![CodeIQ Dashboard]
-(![alt text](<Screenshot 2025-09-16 at 5.58.50 AM.png>)) ---
+
+
+<img width="1440" height="819" alt="Screenshot 2025-09-16 at 5 58 50 AM" src="https://github.com/user-attachments/assets/b70db498-99de-4132-b8a1-f8977e3f70bf" />
+
+<img width="1440" height="811" alt="Screenshot 2025-09-16 at 6 00 50 AM" src="https://github.com/user-attachments/assets/e192e65f-07a3-44f5-95d3-ad37d1645063" />
+
+<img width="1438" height="814" alt="Screenshot 2025-09-16 at 6 05 39 AM" src="https://github.com/user-attachments/assets/044afdac-8364-4ea4-a08a-a96dbc248508" />
+
+<img width="1440" height="817" alt="Screenshot 2025-09-16 at 6 06 10 AM" src="https://github.com/user-attachments/assets/5715fe09-5ffa-45d7-9022-a88b50b783fc" />
+
+<img width="1432" height="809" alt="Screenshot 2025-09-16 at 6 06 31 AM" src="https://github.com/user-attachments/assets/26d70936-6962-4ac4-bf16-4d7458af8df3" />
+
+** ![CodeIQ Backend] **
+
+<img width="1438" height="813" alt="Screenshot 2025-09-16 at 6 00 09 AM" src="https://github.com/user-attachments/assets/00a557db-3106-4402-8e37-9966875c4602" />
+
+---
 
 ## ✨ Core Features
 
